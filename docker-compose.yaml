@@ -6,6 +6,8 @@ services:
       - "8085:8000"
     environment:
       - WHISPER_MODEL=base
+      - COLAB_SECRET=my-secret-key-123
+      - NGROK_DOMAIN=epilepsy-theology-lucrative.ngrok-free.dev
     volumes:
       - whisper_cache:/root/.cache
     restart: unless-stopped

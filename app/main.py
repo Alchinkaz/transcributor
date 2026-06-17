@@ -3,6 +3,8 @@ import re
 import uuid
 import shutil
 import logging
+import time
+import httpx
 from flask import Flask, request, jsonify, send_from_directory
 
 logging.basicConfig(level=logging.INFO)
@@ -12,6 +14,8 @@ app = Flask(__name__, static_folder="static")
 
 TEMP_DIR = "/tmp/transcriber"
 MODEL_SIZE = os.environ.get("WHISPER_MODEL", "base")
+COLAB_SECRET = os.environ.get("COLAB_SECRET", "my-secret-key-123")
+NGROK_DOMAIN = os.environ.get("NGROK_DOMAIN", "")
 
 # Lazy-load the whisper model
 _model = None
@@ -97,10 +101,41 @@ def api_transcribe():
         logger.info(f"Downloading audio from: {url}")
         audio_path, title = download_audio(url, job_dir)
 
-        logger.info("Starting transcription...")
-        text = transcribe_audio(audio_path)
+        # Check if Colab is alive by pinging the ngrok domain
+        is_colab_alive = False
+        colab_url = None
+        if NGROK_DOMAIN:
+            colab_url = f"https://{NGROK_DOMAIN}"
+            try:
+                r = httpx.get(colab_url, headers={"ngrok-skip-browser-warning": "1"}, timeout=2.0)
+                is_colab_alive = (r.status_code == 200)
+            except Exception:
+                pass
 
-        logger.info("Transcription complete")
+        if is_colab_alive and colab_url:
+            logger.info("Routing transcription to Colab GPU backend...")
+            try:
+                with open(audio_path, "rb") as f:
+                    response = httpx.post(
+                        f"{colab_url}/transcribe",
+                        files={"audio": f},
+                        headers={
+                            "Authorization": f"Bearer {COLAB_SECRET}",
+                            "ngrok-skip-browser-warning": "1"
+                        },
+                        timeout=600.0 # 10 minutes timeout for long audios
+                    )
+                response.raise_for_status()
+                text = response.json().get("text", "")
+                logger.info("Colab transcription complete")
+            except Exception as e:
+                logger.error(f"Colab transcription failed, falling back to CPU: {e}")
+                logger.info("Starting local CPU transcription...")
+                text = transcribe_audio(audio_path)
+        else:
+            logger.info("Colab not active, starting local CPU transcription...")
+            text = transcribe_audio(audio_path)
+
         return jsonify({"title": title, "text": text})
 
     except Exception as e:
@@ -115,6 +150,25 @@ def api_transcribe():
 @app.route("/api/health")
 def health():
     return jsonify({"status": "ok"})
+
+
+@app.route("/api/colab/status")
+def colab_status():
+    is_alive = False
+    colab_url = None
+    if NGROK_DOMAIN:
+        colab_url = f"https://{NGROK_DOMAIN}"
+        try:
+            r = httpx.get(colab_url, headers={"ngrok-skip-browser-warning": "1"}, timeout=2.0)
+            if r.status_code == 200:
+                is_alive = True
+        except Exception:
+            pass
+            
+    return jsonify({
+        "active": is_alive,
+        "url": colab_url if is_alive else None
+    })
 
 
 if __name__ == "__main__":

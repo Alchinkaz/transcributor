@@ -455,6 +455,77 @@
                 font-size: 1.4rem;
             }
         }
+        
+        /* Colab Status Panel */
+        .colab-panel {
+            background: rgba(139, 92, 246, 0.05);
+            border: 1px solid rgba(139, 92, 246, 0.15);
+            border-radius: 16px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.3s ease;
+        }
+        
+        .colab-panel.active {
+            background: rgba(16, 185, 129, 0.05);
+            border-color: rgba(16, 185, 129, 0.2);
+        }
+        
+        .colab-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--error);
+            box-shadow: 0 0 10px var(--error);
+            transition: all 0.3s ease;
+        }
+        
+        .colab-panel.active .status-dot {
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+        }
+        
+        .colab-text {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        
+        .colab-text strong {
+            color: var(--text-primary);
+            display: block;
+            margin-bottom: 2px;
+        }
+        
+        .colab-btn {
+            padding: 8px 16px;
+            background: rgba(139, 92, 246, 0.15);
+            color: var(--accent);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        
+        .colab-btn:hover {
+            background: rgba(139, 92, 246, 0.25);
+            color: #a78bfa;
+        }
+        
+        .colab-panel.active .colab-btn {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -468,6 +539,18 @@
     </header>
 
     <main class="container">
+        <!-- Colab Status Panel -->
+        <div class="colab-panel" id="colab-panel">
+            <div class="colab-info">
+                <div class="status-dot" id="colab-dot"></div>
+                <div class="colab-text">
+                    <strong id="colab-title">GPU-сервер не активен</strong>
+                    <span id="colab-desc">Транскрибация будет работать локально на CPU (медленнее)</span>
+                </div>
+            </div>
+            <a href="#" target="_blank" rel="noopener" class="colab-btn" id="colab-launch-btn">🚀 Запустить Colab</a>
+        </div>
+
         <div class="card">
             <form id="transcribe-form" autocomplete="off">
                 <div class="input-group">
@@ -558,6 +641,34 @@
                 statusInterval = null;
             }
         }
+
+        // Colab Status Polling
+        const colabPanel = document.getElementById('colab-panel');
+        const colabTitle = document.getElementById('colab-title');
+        const colabDesc = document.getElementById('colab-desc');
+        
+        async function checkColabStatus() {
+            try {
+                const res = await fetch('/api/colab/status');
+                const data = await res.json();
+                
+                if (data.active) {
+                    colabPanel.classList.add('active');
+                    colabTitle.textContent = 'GPU-сервер активен (WhisperX)';
+                    colabDesc.textContent = 'Супербыстрая обработка через Google Colab';
+                } else {
+                    colabPanel.classList.remove('active');
+                    colabTitle.textContent = 'GPU-сервер не активен';
+                    colabDesc.textContent = 'Транскрибация будет работать локально на CPU (медленнее)';
+                }
+            } catch (err) {
+                console.error("Colab status check failed", err);
+            }
+        }
+        
+        // Check immediately and then every 10 seconds
+        checkColabStatus();
+        setInterval(checkColabStatus, 10000);
 
         function showError(msg) {
             hideStatus();

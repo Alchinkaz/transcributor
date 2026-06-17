@@ -3,7 +3,7 @@ services:
     build: .
     container_name: transcributor
     ports:
-      - "8000:8000"
+      - "8085:8000"
     environment:
       - WHISPER_MODEL=base
     volumes:

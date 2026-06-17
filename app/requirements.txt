@@ -1,0 +1,4 @@
+flask==3.1.1
+yt-dlp==2025.5.22
+faster-whisper==1.1.1
+gunicorn==23.0.0
